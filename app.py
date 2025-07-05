@@ -1,12 +1,27 @@
 from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
+from flask_cors import CORS
+from flask_login import UserMixin, login_user, logout_user, current_user, login_required, LoginManager
 
 app = Flask(__name__)
+app.config['SECRET_KEY'] = 'noggers123'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///ecommerce.db'
 
+login_manager = LoginManager()
 db = SQLAlchemy(app)
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+CORS(app)
 
 #Product model
+class User(db.Model, UserMixin):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(150), unique=True, nullable=False)
+    password = db.Column(db.String(150), nullable=False)
+
+    def __repr__(self):
+        return f'<User {self.username}>'
+
 class Product(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
@@ -16,16 +31,40 @@ class Product(db.Model):
     def __repr__(self):
         return f'<Product {self.name}>'
 
-# class User(db.Model):
-#     id = db.Column(db.Integer, primary_key=True)
-#     username = db.Column(db.String(100), unique=True, nullable=False)
-#     email = db.Column(db.String(120), unique=True, nullable=False)
+#Authentication loader
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
 
-#     def __repr__(self):
-#         return f'<User {self.username}>'
+
+# Login route
+@app.route('/login', methods=['POST'])
+def login():
+    data = request.json
+    username = data.get('username')
+    password = data.get('password')
+    
+    if not username or not password:
+        return jsonify({"message": "Username and password are required"}), 400
+    
+    user = User.query.filter_by(username=username, password=password).first()
+    
+    if user:
+        login_user(user)
+        return jsonify({"message": "Login successful", "user_id": user.id}), 200
+    else:
+        return jsonify({"message": "Invalid credentials"}), 401
+
+@app.route('/logout', methods=['POST'])
+@login_required
+def logout():
+    logout_user()
+    return jsonify({"message": "Logout successful"}), 200
+
 
 #Add product
 @app.route('/api/products/add', methods=['POST'])
+@login_required
 def add_product():
     data = request.json
     if not data or not all(key in data for key in ('name', 'price')):
@@ -52,7 +91,7 @@ def get_products():
 
 #GET by ID
 @app.route('/api/products/<int:product_id>', methods=['GET'])
-def get_product(product_id):
+def get_product_details(product_id):
     product = Product.query.get_or_404(product_id)
     return jsonify({
         'id': product.id,
@@ -62,7 +101,8 @@ def get_product(product_id):
     }), 200
 
 #UPDATE
-@app.route('/api/products/<int:product_id>', methods=['PUT'])
+@app.route('/api/products/update/<int:product_id>', methods=['PUT'])
+@login_required
 def update_product(product_id):
     data = request.json
     product = Product.query.get_or_404(product_id)
@@ -79,6 +119,7 @@ def update_product(product_id):
 
 #DELETE
 @app.route('/api/products/delete/<int:product_id>', methods=['DELETE'])
+@login_required
 def delete_product(product_id):
     product = Product.query.get_or_404(product_id)
     db.session.delete(product)
