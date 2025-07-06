@@ -1,1 +1,12 @@
 venv/
+# Elastic Beanstalk Files
+.elasticbeanstalk/*
+!.elasticbeanstalk/*.cfg.yml
+!.elasticbeanstalk/*.global.yml
+
+aws/
+aws-elasticbeanstalk-cli-setup/
+.elasticbeanstalk/
+_pycache_/
+/aws-elastic-beanstalk-cli-setup
+*.zip
