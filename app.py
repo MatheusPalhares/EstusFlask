@@ -18,6 +18,7 @@ class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(150), unique=True, nullable=False)
     password = db.Column(db.String(150), nullable=False)
+    cart = db.relationship('CartItem', backref='user', lazy=True)
 
     def __repr__(self):
         return f'<User {self.username}>'
@@ -30,6 +31,14 @@ class Product(db.Model):
 
     def __repr__(self):
         return f'<Product {self.name}>'
+    
+class CartItem(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    product_id = db.Column(db.Integer, db.ForeignKey('product.id'), nullable=False)
+
+    def __repr__(self):
+        return f'<CartItem {self.id} - Product {self.product_id}>'
 
 #Authentication loader
 @login_manager.user_loader
@@ -61,6 +70,57 @@ def logout():
     logout_user()
     return jsonify({"message": "Logout successful"}), 200
 
+#Cart route
+@app.route('/api/cart/add/<int:product_id>', methods=['POST'])
+@login_required
+def add_to_cart(product_id):
+    user = User.query.get_or_404(current_user.id)
+    product = Product.query.get_or_404(product_id)
+    cart_item = CartItem(user_id=int(current_user.id), product_id=int(product.id))
+    db.session.add(cart_item)
+    db.session.commit()
+    return jsonify({"message": "Product added to cart sucessfully!"}), 200
+
+@app.route('/api/cart/remove/<int:product_id>', methods=['DELETE'])
+@login_required
+def remove_from_cart(product_id):
+    cart_item = CartItem.query.filter_by(user_id=current_user.id, product_id=product_id).first()
+    if not cart_item:
+        return jsonify({"message": "Item not found in cart."}), 404
+    db.session.delete(cart_item)
+    db.session.commit()
+    return jsonify({"message": "Product removed from cart successfully!"}), 200
+
+@app.route('/api/cart', methods=['GET'])
+@login_required
+def view_cart():
+    cart_items = CartItem.query.filter_by(user_id=current_user.id).all()
+    products = []
+    for item in cart_items:
+        product = Product.query.get(item.product_id)
+        if product:
+            products.append({
+                'id': product.id,
+                'name': product.name,
+                'price': product.price,
+                'description': product.description
+            })
+    return jsonify(products), 200
+
+@app.route('/api/cart/checkout', methods=['POST'])
+@login_required
+def checkout():
+    cart_items = CartItem.query.filter_by(user_id=current_user.id).all()
+    if not cart_items:
+        return jsonify({"message": "Your cart is empty"}), 400
+    
+    # Here you would typically process the payment and create an order
+    # For simplicity, we will just clear the cart
+    for item in cart_items:
+        db.session.delete(item)
+    
+    db.session.commit()
+    return jsonify({"message": "Checkout successful, your cart is now empty"}), 200
 
 #Add product
 @app.route('/api/products/add', methods=['POST'])
